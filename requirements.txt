@@ -52,3 +52,6 @@ streamlit==1.16.0
 
 # typeguard
 typeguard==2.13.3
+
+# gymbandits 
+gym-bandits @ git+https://github.com/JKCooper2/gym-bandits#egg=gym-bandits
