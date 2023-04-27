@@ -181,11 +181,10 @@ class GeneralTask(gym.Env):
         # Calculate remaining timesteps and if done
         self.current_state = next_state
         self.current_step += 1
-        truncated = self.current_step == self.max_steps
-        done = reward != 0
+        done = self.current_step == self.max_steps
         obs = self._get_obs()
         # returns obs, reward, terminated, truncated, info
-        return obs, reward, done, truncated, {}
+        return obs, reward, done, False, {}
 
     def render(self):
         if self.render_mode == "rgb_array":
