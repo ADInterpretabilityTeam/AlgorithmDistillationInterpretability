@@ -351,6 +351,247 @@ class TrajectoryDataset(Dataset):
         return s, a, r, d, rtg, ti, m
 
 
+class MutliEpisodeDataset(Dataset):
+    ''' AD dataset, removes rtg and introduces multi episode trajectories '''
+    def __init__(
+        self,
+        trajectory_path,
+        context_len=400,
+        normalize_state=False,
+        preprocess_observations: Callable = None,
+        device="cpu",
+    ):
+        self.trajectory_path = trajectory_path
+        self.context_len = context_len
+        self.device = device
+        self.normalize_state = normalize_state
+        self.preprocess_observations = preprocess_observations
+        self.load_trajectories()
+
+    def load_trajectories(self) -> None:
+        traj_reader = TrajectoryReader(self.trajectory_path)
+        data = traj_reader.read()
+
+        observations = data["data"].get("observations")
+        actions = data["data"].get("actions")
+        rewards = data["data"].get("rewards")
+        dones = data["data"].get("dones")
+        truncated = data["data"].get("truncated")
+        infos = data["data"].get("infos")
+
+        observations = np.array(observations)
+        actions = np.array(actions)
+        rewards = np.array(rewards)
+        dones = np.array(dones)
+        infos = np.array(infos, dtype=np.ndarray)
+
+        # check whether observations are flat or an image
+        if observations.shape[-1] == 3:
+            self.observation_type = "index"
+        elif observations.shape[-1] == 20:
+            self.observation_type = "one_hot"
+        else:
+            raise ValueError(
+                "Observations are not flat or images, check the shape of the observations: ",
+                observations.shape,
+            )
+
+        if self.observation_type != "flat":
+            t_observations = rearrange(
+                torch.tensor(observations), "t b h w c -> (b t) h w c"
+            )
+        else:
+            t_observations = rearrange(
+                torch.tensor(observations), "t b f -> (b t) f"
+            )
+
+        t_actions = rearrange(torch.tensor(actions), "t b -> (b t)")
+        t_rewards = rearrange(torch.tensor(rewards), "t b -> (b t)")
+        t_dones = rearrange(torch.tensor(dones), "t b -> (b t)")
+        t_truncated = rearrange(torch.tensor(truncated), "t b -> (b t)")
+
+        t_done_or_truncated = torch.logical_or(t_dones, t_truncated)
+        done_indices = torch.where(t_done_or_truncated)[0]
+
+        self.actions = torch.tensor_split(t_actions, done_indices + 1)
+        self.rewards = torch.tensor_split(t_rewards, done_indices + 1)
+        self.dones = torch.tensor_split(t_dones, done_indices + 1)
+        self.truncated = torch.tensor_split(t_truncated, done_indices + 1)
+        self.states = torch.tensor_split(t_observations, done_indices + 1)
+        self.returns = [r.sum() for r in self.rewards]
+        self.timesteps = [torch.arange(len(i)) for i in self.states]
+        self.traj_lens = np.array([len(i) for i in self.states])
+
+        # remove trajs with length 0
+        traj_len_mask = self.traj_lens > 0
+        self.actions = [i for i, m in zip(self.actions, traj_len_mask) if m]
+        self.rewards = [i for i, m in zip(self.rewards, traj_len_mask) if m]
+        self.dones = [i for i, m in zip(self.dones, traj_len_mask) if m]
+        self.truncated = [
+            i for i, m in zip(self.truncated, traj_len_mask) if m
+        ]
+        self.states = [i for i, m in zip(self.states, traj_len_mask) if m]
+        self.returns = [i for i, m in zip(self.returns, traj_len_mask) if m]
+        self.timesteps = [
+            i for i, m in zip(self.timesteps, traj_len_mask) if m
+        ]
+        self.traj_lens = self.traj_lens[traj_len_mask]
+
+        self.num_timesteps = sum(self.traj_lens)
+        self.num_trajectories = len(self.states)
+
+        self.state_dim = list(self.states[0][0].shape)
+        self.act_dim = list(self.actions[0][0].shape)
+        self.max_ep_len = max([len(i) for i in self.states])
+        self.metadata = data["metadata"]
+
+        if self.normalize_state:
+            self.state_mean, self.state_std = self.get_state_mean_std()
+        else:
+            self.state_mean = 0
+            self.state_std = 1
+
+        # TODO Make this way less hacky
+        if self.preprocess_observations == one_hot_encode_observation:
+            self.observation_type = "one_hot"
+
+    def get_state_mean_std(self):
+        # used for input normalization
+        all_states = np.concatenate(self.states, axis=0)
+        state_mean, state_std = (
+            np.mean(all_states, axis=0),
+            np.std(all_states, axis=0) + 1e-6,
+        )
+        return state_mean, state_std
+
+    def get_batch(self, batch_size=256):
+        # TODO this does not seem to be used much, but hey 
+        states, actions, rewards, dones, timesteps = (
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+        for i in range(batch_size):
+            # pick a random index 
+            traj_index = random.randint(0, self.num_trajectories)
+            s, a, r, d, ti = self.get_mutli_episode(
+                traj_index 
+            )
+            rewards.append(r)
+            actions.append(a)
+            states.append(s)
+            dones.append(d)
+            timesteps.append(ti)
+
+        return self.return_tensors(
+            np.concatenate(states, axis=0), 
+            np.concatenate(actions, axis=0), 
+            np.concatenate(rewards, axis=0), 
+            np.concatenate(dones, axis=0), 
+            np.concatenate(timesteps, axis=0) 
+        )
+
+    def get_mutli_episode(self, traj_index, bdim=False):
+        context_len = self.context_len
+        # take one, add the steps, check if we are below context_length,
+        # repeat 
+        # there might be a more elegant way of doing this 
+        s, a, r, d, ti = self.get_traj(traj_index, si=0)  
+        tlen = s.shape[1]
+        while tlen < context_len:
+            traj_index += 1
+            if traj_index >= self.num_trajectories:
+                traj_index = 0
+
+            s_, a_, r_, d_, ti_ = self.get_traj(traj_index, si=0)  
+            r = np.concatenate([r, r_], axis=1)
+            s = np.concatenate([s, s_], axis=1)
+            a = np.concatenate([a, a_], axis=1)
+            d = np.concatenate([d, d_], axis=1)
+            ti = np.concatenate([ti, ti_], axis=1)
+            tlen += s_.shape[1]
+            # we don't need padding because we just keep adding episodes at the end  
+        # now our stream is euqla length or longer than context-len
+        return self.return_tensors(
+            s[:, :context_len], 
+            a[:, :context_len], 
+            r[:, :context_len], 
+            d[:, :context_len], 
+            ti[:, :context_len], 
+            squeeze=not bdim
+        )
+            
+    def get_traj(self, traj_index, si=None):
+        ''' returns a single entire trajectory (not as tensors) '''
+        traj_rewards = self.rewards[traj_index]
+        traj_states = self.states[traj_index]
+        traj_actions = self.actions[traj_index]
+        traj_dones = self.dones[traj_index]
+
+        # start index
+        if si is None:
+            si = random.randint(0, traj_rewards.shape[0] - 1)
+
+        # get sequences from dataset
+        s = traj_states[si:].reshape(1, -1, *self.state_dim)
+        a = traj_actions[si:].reshape(1, -1, *self.act_dim)
+        r = traj_rewards[si:].reshape(1, -1, 1)
+        d = traj_dones[si:].reshape(1, -1)
+        ti = np.arange(si, si + s.shape[1]).reshape(1, -1)
+        return s, a, r, d, ti
+
+    def return_tensors(self, s, a, r, d, timesteps, squeeze=True):
+        if isinstance(s, torch.Tensor):
+            s = s.to(dtype=torch.float32, device=self.device)
+        else:
+            s = torch.from_numpy(s).to(dtype=torch.float32, device=self.device)
+
+        if isinstance(a, torch.Tensor):
+            a = a.to(dtype=torch.long, device=self.device)
+        else:
+            a = torch.from_numpy(a).to(dtype=torch.long, device=self.device)
+
+        if isinstance(r, torch.Tensor):
+            r = r.to(dtype=torch.float32, device=self.device)
+        else:
+            r = torch.from_numpy(r).to(dtype=torch.float32, device=self.device)
+
+        if isinstance(d, torch.Tensor):
+            d = d.to(dtype=torch.bool, device=self.device)
+        else:
+            d = torch.from_numpy(d).to(dtype=torch.bool, device=self.device)
+        timesteps = torch.from_numpy(timesteps).to(
+            dtype=torch.long, device=self.device
+        )
+        # squeeze out the batch dimension
+        if squeeze:
+            s = s.squeeze(0)
+            a = a.squeeze(0)
+            r = r.squeeze(0)
+            d = d.squeeze(0)
+            timesteps = timesteps.squeeze(0)
+        return s, a, r, d, timesteps
+
+    # TODO this will repeat trajectories if they are multiepisode
+    def __len__(self):
+        return self.num_trajectories 
+
+    def __getitem__(self, idx):
+        s, a, r, d, ti = self.get_traj(
+            idx,
+        )
+        if self.preprocess_observations is not None:
+            s = self.preprocess_observations(s)
+        return s, a, r, d, ti
+
+
+# TODO rewrite a MultiEpisode class starting from scratch that 
+# indexes a packed sequence of histories 
+# that way we get accurate length and indexing 
+
+
 class TrajectoryVisualizer:
     def __init__(self, trajectory_dataset: TrajectoryDataset):
         self.trajectory_loader = trajectory_dataset
