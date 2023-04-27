@@ -454,6 +454,207 @@ class DecisionTransformer(TrajectoryTransformer):
 
         return state_preds, action_preds, reward_preds
 
+class AlgorithmDistillationTransformer(TrajectoryTransformer):
+    def __init__(self, environment_config, transformer_config, **kwargs):
+        super().__init__(
+            environment_config=environment_config,
+            transformer_config=transformer_config,
+            **kwargs,
+        )
+        self.model_type = "algorithm_distillation"
+        self.reward_embedding = nn.Sequential(
+            nn.Linear(1, self.transformer_config.d_model, bias=False)
+        )
+        self.reward_predictor = nn.Linear(self.transformer_config.d_model, 1)
+
+        # n_ctx include full timesteps except for the last where it doesn't know the action
+        assert (transformer_config.n_ctx - 1) % 3 == 0#TODO figure
+
+        nn.init.normal_(
+            self.reward_embedding[0].weight,
+            mean=0.0,
+            std=1 / self.transformer_config.d_model,
+        )
+
+    def predict_rewards(self, x):
+        return self.reward_predictor(x)
+
+    def get_token_embeddings(
+        self,
+        state_embeddings,
+        time_embeddings,
+        reward_embeddings,
+        action_embeddings=None,
+    ):
+        """
+        We need to compose the embeddings for:
+            - states
+            - actions
+            - rewards
+            - time
+
+        Handling the cases where:
+        1. we may not have action yet (state)
+        2. we have (action, state, reward)...
+
+        """
+        batches = state_embeddings.shape[0]
+        timesteps = time_embeddings.shape[1]
+
+        
+        state_embeddings = state_embeddings + time_embeddings
+        if action_embeddings is not None:
+            if action_embeddings.shape[1] < timesteps:
+                assert (
+                    action_embeddings.shape[1] == timesteps - 1
+                ), "Action embeddings must be one timestep less than state embeddings"
+                assert (
+                    reward_embeddings.shape[1] == timesteps - 1
+                ), "Reward embeddings must be one timestep less than state embeddings"
+                action_embeddings = (
+                    action_embeddings
+                    + time_embeddings[:, : action_embeddings.shape[1]]
+                )
+                reward_embeddings = (
+                    reward_embeddings
+                    + time_embeddings[:, : reward_embeddings.shape[1]]
+                )
+                trajectory_length = timesteps * 3 - 2#No action or reward
+            else:
+                action_embeddings = action_embeddings + time_embeddings
+                trajectory_length = timesteps * 3
+        else:
+            trajectory_length = 1  # one timestep, no action or reward yet
+
+        # create the token embeddings
+        token_embeddings = torch.zeros(
+            (batches, trajectory_length, self.transformer_config.d_model),
+            dtype=torch.float32,
+            device=state_embeddings.device,
+        )  # batches, blocksize, n_embd
+        if action_embeddings is not None:
+            
+            token_embeddings[:, 0::3, :] = state_embeddings
+            token_embeddings[:, 1::3, :] = action_embeddings
+            token_embeddings[:, 2::3, :] = reward_embeddings
+        else:
+            token_embeddings[:, 0, :] = state_embeddings[:, 0, :]
+
+        
+
+        return token_embeddings
+
+    def to_tokens(self, states, actions, rewards, timesteps):
+        # embed states and recast back to (batch, block_size, n_embd)
+        state_embeddings = self.get_state_embedding(
+            states
+        )  # batch_size, block_size, n_embd
+        action_embeddings = (
+            self.get_action_embedding(actions) if actions is not None else None
+        )  # batch_size, block_size, n_embd or None
+        reward_embeddings = self.get_reward_embedding(
+            rewards
+        )  if rewards is not None else None
+        # batch_size, block_size, n_embd
+        time_embeddings = self.get_time_embedding(
+            timesteps
+        )  # batch_size, block_size, n_embd
+        # use state_embeddings, actions, rewards to go and
+
+        token_embeddings = self.get_token_embeddings(
+            state_embeddings=state_embeddings,
+            action_embeddings=action_embeddings,
+            reward_embeddings=reward_embeddings,
+            time_embeddings=time_embeddings,
+        )
+
+        return token_embeddings
+
+    def get_action(self, states, actions, rewards, timesteps):
+        state_preds, action_preds, reward_preds = self.forward(
+            states, actions, rewards, timesteps
+        )
+
+        # get the action prediction
+        action_preds = action_preds[:, -1, :]  # (batch, n_actions)
+        action = torch.argmax(action_preds, dim=-1)  # (batch)
+        return action
+
+    def get_reward_embedding(self, rewards):
+        block_size = rewards.shape[1]
+        rewards = rearrange(rewards, "batch block reward -> (batch block) reward")
+        reward_embeddings = self.reward_embedding(rewards.type(torch.float32))
+        reward_embeddings = rearrange(
+            rewards,
+            "(batch block) n_embd -> batch block n_embd",
+            block=block_size,
+        )
+        return reward_embeddings
+
+    def get_logits(self, x, batch_size, seq_length, no_actions: bool):
+        if no_actions is False:
+            # TODO replace with einsum
+            if (x.shape[1] % 3 != 0) and ((x.shape[1] + 2) % 3 == 0):
+                x = torch.concat((x, x[:, [-2,-1]]), dim=1)#TODO ensure this makes sense now
+
+            x = x.reshape(
+                batch_size, seq_length, 3, self.transformer_config.d_model
+            )
+            x = x.permute(0, 2, 1, 3)
+
+            # predict next action given state 
+            action_preds = self.predict_actions(x[:, 0])
+            return None,action_preds , None #TODO decide if remove Nones or add all predictions
+
+        else:
+            # TODO replace with einsum
+            
+            #x = x.reshape(batch_size, seq_length, 1, self.transformer_config.d_model)#TODO figure out why seq lenght is broken here
+            x = x.reshape(batch_size, x.shape[1], 1, self.transformer_config.d_model)
+            x = x.permute(0, 2, 1, 3)
+            # predict next action given state 
+            action_preds = self.predict_actions(x[:, 0])
+            return None, action_preds, None
+
+    def forward(
+        self,
+        # has variable shape, starting with batch, position
+        states: TT[...],  # noqa: F821
+        actions: TT["batch", "position"],  # noqa: F821
+        rewards: TT["batch", "position"],  # noqa: F821
+        timesteps: TT["batch", "position"],  # noqa: F821
+        pad_action: bool = True,
+    ) -> Tuple[
+        TT[...], TT["batch", "position"], TT["batch", "position"]  # noqa: F821
+    ]:
+        
+        batch_size = states.shape[0]
+        seq_length = states.shape[1]
+        no_actions = actions is None
+        if no_actions is False:
+            if actions.shape[1] < seq_length - 1:
+                raise ValueError(
+                    f"Actions required for all timesteps except the last, got {actions.shape[1]} and {seq_length}"
+                )
+
+            # if actions.shape[1] == seq_length - 1:
+            #     if pad_action:
+            #         print(
+            #             "Warning: actions are missing for the last timestep, padding with zeros")
+            #         # This means that you can't interpret Reward or State predictions for the last timestep!!!
+            #         actions = torch.cat([actions, torch.zeros(
+            #             batch_size, 1, 1, dtype=torch.long, device=actions.device)], dim=1)
+
+        # embed states and recast back to (batch, block_size, n_embd)
+        token_embeddings = self.to_tokens(states, actions, rewards, timesteps)
+        x = self.transformer(token_embeddings)
+        state_preds, action_preds, reward_preds = self.get_logits(
+            x, batch_size, seq_length, no_actions=no_actions
+        )
+
+        return state_preds, action_preds, reward_preds
+
+
 
 class CloneTransformer(TrajectoryTransformer):
     """

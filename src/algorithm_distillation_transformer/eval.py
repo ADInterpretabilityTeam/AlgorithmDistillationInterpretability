@@ -11,13 +11,11 @@ from copy import deepcopy
 import wandb
 from src.models.trajectory_transformer import (
     CloneTransformer,
-    DecisionTransformer,
+    AlgorithmDistillationTransformer,
     TrajectoryTransformer,
 )
 
 from .utils import get_max_len_from_model_type, initialize_padding_inputs
-
-
 def evaluate_dt_agent(
     env_id: str,
     model: TrajectoryTransformer,
@@ -25,7 +23,6 @@ def evaluate_dt_agent(
     trajectories=300,
     track=False,
     batch_number=0,
-    initial_rtg=0.98,
     use_tqdm=True,
     device="cpu",
     num_envs=8,
@@ -40,14 +37,13 @@ def evaluate_dt_agent(
             n_ctx=model.n_ctx,
             time_embedding_type=model.time_embedding_type,
         )
-
     max_len = get_max_len_from_model_type(
         model.model_type,
         model.transformer_config.n_ctx,
     )
 
     traj_lengths = []
-    rewards = []
+    reward_list =[]
     n_terminated = 0
     n_truncated = 0
     reward_total = 0
@@ -72,10 +68,9 @@ def evaluate_dt_agent(
     action_pad_token = (
         env.single_action_space.n
     )  # current pad token for actions
-    obs, actions, reward, rtg, timesteps, mask = initialize_padding_inputs(
+    obs, actions, rewards, timesteps, mask = initialize_padding_inputs(
         max_len=max_len,
         initial_obs=obs,
-        initial_rtg=initial_rtg,
         action_pad_token=action_pad_token,
         batch_size=num_envs,
         device=device,
@@ -85,35 +80,33 @@ def evaluate_dt_agent(
         timesteps = timesteps.to(t.float32)
 
     # get first action
-    if isinstance(model, DecisionTransformer):
-        _, action_preds, _ = model.forward(
-            states=obs, actions=actions, rtgs=rtg, timesteps=timesteps
+    if isinstance(model, AlgorithmDistillationTransformer):
+        state_preds, action_preds, reward_preds = model.forward(
+            states=obs, actions=None, rewards=None, timesteps=timesteps
         )
-    elif isinstance(model, CloneTransformer):
-        _, action_preds = model.forward(
-            states=obs, actions=actions, timesteps=timesteps
-        )
-    else:
-        raise ValueError("Model type not supported")
-
     new_action = t.argmax(action_preds[:, -1], dim=-1).squeeze(-1)
     new_obs, new_reward, terminated, truncated, info = env.step(new_action)
     dones = np.logical_or(terminated, truncated)
+
+    current_trajectory_length = t.ones(num_envs, dtype=t.int)
     while n_terminated + n_truncated < trajectories:
         # concat init obs to new obs
         obs = t.cat(
             [obs, t.tensor(new_obs["image"]).unsqueeze(1).to(device)], dim=1
         )
 
-        # add new reward to init reward
-        new_rtg = rtg[:, -1:, :] - new_reward[None, :, None]
-        rtg = t.cat([rtg, new_rtg], dim=1)
+        # add new reward
+        t.cat([rewards, t.tensor(new_reward).unsqueeze(1).unsqueeze(2)], dim=1)
+
 
         # add new timesteps
-        # if we are done, we don't want to increment the timestep,
-        # so we use the not operator to flip the done bit
-        new_timestep = timesteps[:, -1:, :] + np.invert(dones)[:, None, None]
-        timesteps = t.cat([timesteps, new_timestep], dim=1)
+        timesteps = t.cat(
+            [
+                timesteps,
+                rearrange(current_trajectory_length.to(device), "e -> e 1 1"),
+            ],
+            dim=1,
+        )
 
         if model.transformer_config.time_embedding_type == "linear":
             timesteps = timesteps.to(t.float32)
@@ -124,26 +117,26 @@ def evaluate_dt_agent(
             )
 
         # truncations:
-        obs = obs[:, -max_len:]
+        obs = obs[:, -max_len:] if obs.shape[1] > max_len else obs
         actions = actions[:, -(max_len - 1) :] if max_len > 1 else None
-        timesteps = timesteps[:, -max_len:]
-        rtg = rtg[:, -max_len:]
-        if isinstance(model, DecisionTransformer):
+        timesteps = (
+            timesteps[:, -max_len:]
+            if timesteps.shape[1] > max_len
+            else timesteps
+        )
+        rewards = rewards[:, -max_len:] if rewards.shape[1] > max_len else rewards
+        
+        if isinstance(model, AlgorithmDistillationTransformer):
             state_preds, action_preds, reward_preds = model.forward(
-                states=obs, actions=actions, rtgs=rtg, timesteps=timesteps
-            )
-        elif isinstance(model, CloneTransformer):
-            state_preds, action_preds = model.forward(
-                states=obs, actions=actions, timesteps=timesteps
-            )
-        else:
-            raise NotImplementedError(
-                "Model type not supported for evaluation."
+                states=obs, actions=actions, rewards=rewards, timesteps=timesteps
             )
 
-        new_action = t.argmax(action_preds, dim=-1)[:, -1].squeeze(-1)
-
+        new_action = t.argmax(action_preds, dim=-1).squeeze(-1)
+        if new_action.dim() > 1:
+            new_action = new_action[:, -1]
+        # convert to numpy
         new_obs, new_reward, terminated, truncated, info = env.step(new_action)
+        # print(f"took action  {action} at timestep {i} for reward {new_reward}")
 
         n_positive = n_positive + sum(new_reward > 0)
         reward_total += sum(new_reward)
@@ -160,12 +153,10 @@ def evaluate_dt_agent(
             )
 
         dones = np.logical_or(terminated, truncated)
-
         traj_lengths.extend(current_trajectory_length[dones].tolist())
-        rewards.extend(new_reward[dones])
+        reward_list.extend(new_reward[dones])
         current_trajectory_length[dones] = 0
-
-        # for each done, replace the obs, rtg, action, timestep with the new obs, rtg, action, timestep
+       # for each done, replace the obs, rtg, action, timestep with the new obs, rtg, action, timestep
         batch_reset_indexes = np.where(dones)
         if sum(dones) > 0:
             _new_obs = deepcopy(new_obs)
@@ -173,14 +164,12 @@ def evaluate_dt_agent(
             (
                 _obs,
                 _actions,
-                reward[batch_reset_indexes],
-                _rtg,
+                rewards[batch_reset_indexes],
                 timesteps[batch_reset_indexes],
                 mask[batch_reset_indexes],
             ) = initialize_padding_inputs(
                 max_len=max_len,
                 initial_obs=_new_obs,
-                initial_rtg=initial_rtg,
                 action_pad_token=action_pad_token,
                 batch_size=sum(dones),
                 device=device,
@@ -188,7 +177,7 @@ def evaluate_dt_agent(
 
             # TODO: annoying dtype issues I'll solve another day...
             obs[batch_reset_indexes] = _obs.to(dtype=obs.dtype)
-            rtg[batch_reset_indexes] = _rtg.to(dtype=rtg.dtype)
+
 
             # hack, obs, action, timesteps and rtg will all be modified on
             # next loop iteration so pad them appropriate to counteract this
@@ -216,11 +205,11 @@ def evaluate_dt_agent(
                     path_to_video = os.path.join(video_path, new_video)
                     wandb.log(
                         {
-                            f"media/video/{initial_rtg}/": wandb.Video(
+                            f"media/video/": wandb.Video(
                                 path_to_video,
                                 fps=4,
                                 format="mp4",
-                                caption=f"{env_id}, after {n_terminated + n_truncated} episodes, reward {new_reward}, rtg {initial_rtg}",
+                                caption=f"{env_id}, after {n_terminated + n_truncated} episodes, reward {new_reward}",
                             )
                         },
                         step=batch_number,
@@ -230,26 +219,23 @@ def evaluate_dt_agent(
     collected_trajectories = n_terminated + n_truncated
 
     statistics = {
-        "initial_rtg": initial_rtg,
         "prop_completed": n_terminated / collected_trajectories,
         "prop_truncated": n_truncated / collected_trajectories,
         "mean_reward": reward_total / collected_trajectories,
         "prop_positive_reward": n_positive / collected_trajectories,
         "mean_traj_length": sum(traj_lengths) / collected_trajectories,
         "traj_lengths": traj_lengths,
-        "rewards": rewards,
+        "rewards": reward_list,
     }
 
     env.close()
     if track:
         # log statistics at batch number but prefix with eval
         for key, value in statistics.items():
-            if key == "initial_rtg":
-                continue
             if key == "traj_lengths":
                 wandb.log(
                     {
-                        f"eval/{str(initial_rtg)}/traj_lengths": wandb.Histogram(
+                        f"eval/traj_lengths": wandb.Histogram(
                             value
                         )
                     },
@@ -258,14 +244,14 @@ def evaluate_dt_agent(
             elif key == "rewards":
                 wandb.log(
                     {
-                        f"eval/{str(initial_rtg)}/rewards": wandb.Histogram(
+                        f"eval/rewards": wandb.Histogram(
                             value
                         )
                     },
                     step=batch_number,
                 )
             wandb.log(
-                {f"eval/{str(initial_rtg)}/" + key: value}, step=batch_number
+                {f"eval/" + key: value}, step=batch_number
             )
 
     return statistics

@@ -162,7 +162,7 @@ class OfflineTrainConfig:
     eval_num_envs: int = 8
 
     def __post_init__(self):
-        assert self.model_type in ["decision_transformer", "clone_transformer"]
+        assert self.model_type in ["decision_transformer","algorithm_distillation","clone_transformer"]
         if isinstance(self.device, str):
             self.device = torch.device(self.device)
 
