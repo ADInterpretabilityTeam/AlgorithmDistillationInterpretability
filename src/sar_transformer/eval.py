@@ -18,7 +18,7 @@ from src.config import EnvironmentConfig
 from src.generation import value_iteration
 
 
-def evaluate_random_agent(env, n_its=10_000):
+def evaluate_random_agent(env, n_its=1_000):
     # Simulate random walks
     scores = []
     for i in range(n_its):
@@ -80,6 +80,7 @@ def evaluate_ad_agent(
     
     # Measure baseline scores
     random_score = evaluate_random_agent(env)
+    optimal_score = evaluate_optimal_agent(env)
     high_score = -1
     
     # Set up buffers
@@ -134,7 +135,7 @@ def evaluate_ad_agent(
             ad_score = sum(ep_rewards[-n_prev_episodes:]) / len(ep_rewards[-n_prev_episodes:])
             if high_score < ad_score:
                 high_score = ad_score
-            pbar.set_description(f"EVAL  - Random walk score: {random_score:.4f}, AD high score: {high_score:.4f}, AD final score: {ad_score:.4f}")
+            pbar.set_description(f"EVAL  - Random walk score: {random_score:.4f}, Optimal score: {optimal_score:.4f}, AD high score: {high_score:.4f}, AD final score: {ad_score:.4f}")
             ep_rewards.append(0)
 
         # Update buffers
@@ -173,4 +174,4 @@ def evaluate_ad_agent(
                     #step=batch_number,
                 )
 
-    return ep_rewards
+    return random_score, optimal_score, ep_rewards[:-1]
