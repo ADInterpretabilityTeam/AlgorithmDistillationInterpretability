@@ -41,6 +41,7 @@ def utils_side_bar():
     with st.sidebar:
         st.subheader("Utils")
         multiple_sample_button()
+        next_episode_sample_button()
 
 def multiple_sample_button():
     sample_amount = int(st.number_input("Sample Multiple", key=f"sample_steps_amount",min_value=0,step=1))
@@ -51,6 +52,16 @@ def multiple_sample_button():
             action_probabilities=F.softmax(action_preds.cpu().detach()[0][-1],dtype=torch.double,dim=0)
             action= np.random.choice(len(action_probabilities), p=action_probabilities)
             respond_to_action(st.session_state.env,action)
+
+def next_episode_sample_button():
+    sample_button = st.button("Sample Untill Next Episode", key=f"next_episode_sample_button")
+    if(sample_button):
+        sample_amount= int(st.session_state.env.max_steps - st.session_state.timesteps[0][-1].item())
+        for i in range(sample_amount):
+                action_preds, x, cache, tokens=get_action_preds(st.session_state.dt)
+                action_probabilities=F.softmax(action_preds.cpu().detach()[0][-1],dtype=torch.double,dim=0)
+                action= np.random.choice(len(action_probabilities), p=action_probabilities)
+                respond_to_action(st.session_state.env,action)
 
 
     
