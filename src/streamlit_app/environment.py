@@ -68,17 +68,21 @@ def get_action_preds(dt):
         actions = (
             actions[:, -(obs.shape[1] - 1) :]
             if (actions.shape[1] > 1 and max_len > 1)
-            else None
+            else None #torch.empty(0)
         )
-    timesteps = timesteps[:, -max_len:] if timesteps.shape[1] > max_len else timesteps
-    reward = (
+        reward = (
         reward[:, -(obs.shape[1] - 1) :]
         if (reward.shape[1] > 1 and max_len > 1)
-        else None
+        else None # torch.empty(0)
     )
+    timesteps = timesteps[:, -max_len:] if timesteps.shape[1] > max_len else timesteps
+  
     obs = obs.to(dt.transformer_config.device)
-    reward = reward.to(dt.transformer_config.device)
-    actions = actions.to(dt.transformer_config.device)
+    if reward is not None:
+        reward = reward.to(dt.transformer_config.device)
+    if actions is not None:
+        actions = actions.to(dt.transformer_config.device)   
+    
     timesteps = timesteps.to(dt.transformer_config.device)
 
     if dt.time_embedding_type == "linear":
@@ -119,18 +123,23 @@ def respond_to_action(env, action):
 
     if st.session_state.a is None:
         st.session_state.a = t.tensor([action]).unsqueeze(0).unsqueeze(0)
-
-    st.session_state.a = t.cat(
+    else:
+        st.session_state.a = t.cat(
         [st.session_state.a, t.tensor([action]).unsqueeze(0).unsqueeze(0)],
         dim=1,
     )
-    st.session_state.reward = t.cat(
+
+    if st.session_state.reward is None: 
+        st.session_state.reward = t.tensor([reward]).unsqueeze(0).unsqueeze(0)
+    else:
+        st.session_state.reward = t.cat(
         [
             st.session_state.reward,
             t.tensor([reward]).unsqueeze(0).unsqueeze(0),
         ],
-        dim=1,
-    )
+        dim=1,)
+
+
     if not done:
         time = st.session_state.timesteps[-1][-1] + 1
         st.session_state.timesteps = t.cat(

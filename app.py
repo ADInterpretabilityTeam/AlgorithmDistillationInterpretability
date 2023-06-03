@@ -163,25 +163,28 @@ with st.expander("Show history"):
     rendered_obss = st.session_state.rendered_obs
     trajectory_length = rendered_obss.shape[0]
 
-    historic_actions = st.session_state.a[0, -trajectory_length:].flatten()
-
     if trajectory_length > 1:
-        right_adjustment = 1 + st.session_state.max_len - trajectory_length
+        historic_actions = st.session_state.a[0, -trajectory_length:].flatten()
+        right_adjustment = 0
+        if(trajectory_length > 2):
+            state_number = st.slider(
+                "State Number",
+                min_value=0,
+                max_value=trajectory_length - 2,
+                step=1,
+                format="State Number: %d",
+            )
+        else:
+            state_number=0
 
-        state_number = st.slider(
-            "State Number",
-            min_value=right_adjustment,
-            max_value=right_adjustment + trajectory_length - 1,
-            step=1,
-            format="State Number: %d",
-        )
-
-        i = state_number - right_adjustment
+        i = state_number
         action_name_func = (
             lambda a: "None" if a == 7 else action_id_to_string[a]
         )
         st.write(f"A{i}:", action_name_func(historic_actions[i].item()))
-        st.write(f"A{i+1}:", action_name_func(historic_actions[i + 1].item()))
+        if(state_number< trajectory_length -2):
+            st.write(f"A{i+1}:", action_name_func(historic_actions[i + 1].item()))
+        
         st.plotly_chart(px.imshow(rendered_obss[i, :, :, :]))
     else:
         st.warning("No history to show")

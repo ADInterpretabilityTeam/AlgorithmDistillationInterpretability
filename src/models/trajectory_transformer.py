@@ -961,20 +961,27 @@ class ConcatTransformer(TrajectoryTransformer):
 
     def to_tokens(self, states, actions, rewards, timesteps):
         # Reshape tokens if wrong shape
+        if actions is None:
+            actions = torch.zeros(states.shape[0], 1, 1, dtype=torch.long).to(states.device)
+            rewards = torch.zeros(states.shape[0], 1, 1).to(states.device) 
         if actions.ndim == 3:
             actions = actions[:, :, 0]
         if rewards.ndim == 3:
             rewards = rewards[:, :, 0]
-        assert states.shape[1] - 1 == actions.shape[1] == rewards.shape[1]
+
+        if states.shape[1]>1:
+            assert states.shape[1] - 1 == actions.shape[1] == rewards.shape[1]
         # Embed actions from discrete values to one hot vectors, shifted over one
         actions = F.one_hot(
-            actions, num_classes=self.environment_config.env.n_actions)  # Converts to (batch, block_size, n_actions)
-        pad_actions = torch.zeros(actions.shape[0], 1, actions.shape[2]).to(states.device)
-        actions = torch.cat([pad_actions, actions], dim=1)
+                actions, num_classes=self.environment_config.env.n_actions)  # Converts to (batch, block_size, n_actions)
+        if states.shape[1]>1:
+            pad_actions = torch.zeros(actions.shape[0], 1, actions.shape[2]).to(states.device)
+            actions = torch.cat([pad_actions, actions], dim=1)
         # Embed rewards shifted over one
         rewards = rewards.unsqueeze(-1)
-        pad_rewards = torch.zeros(rewards.shape[0], 1, rewards.shape[2]).to(states.device)
-        rewards = torch.cat([pad_rewards, rewards], dim=1)
+        if states.shape[1]>1:
+            pad_rewards = torch.zeros(rewards.shape[0], 1, rewards.shape[2]).to(states.device)
+            rewards = torch.cat([pad_rewards, rewards], dim=1)
         token_embeddings = torch.cat([states, actions, rewards], dim=-1)
         return self.input_fc(token_embeddings.to(torch.float32))
 
