@@ -42,7 +42,8 @@ def render_trajectory_details():
         st.write(f"trajectory length: {len(st.session_state.obs[0])}")
         if st.session_state.a is not None:
             st.write(f"actions: {st.session_state.a[0].squeeze(-1).tolist()}")
-        st.write(f"rewards: {st.session_state.reward[0].squeeze(-1).tolist()}")
+        if st.session_state.reward is not None:
+            st.write(f"rewards: {st.session_state.reward[0].squeeze(-1).tolist()}")
         st.write(
             f"timesteps: {st.session_state.timesteps[0].squeeze(-1).tolist()}"
         )

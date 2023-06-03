@@ -16,14 +16,25 @@ def initialize_playground(model_path):
             dt.model_type, dt.transformer_config.n_ctx
         )
         
+        mask = t.concat(
+        (
+            t.zeros((1, max_len - 1), dtype=t.bool),
+            t.ones((1, 1), dtype=t.bool),
+        ),
+        dim=1,
+    )
+        
+        
         n_obs = env.observation_space.shape[0]
-        obs = np.zeros((1, max_len, n_obs))
+        obs = np.zeros((1, 1, n_obs))
         initial_obs, _ = env.reset()
         obs[0, 0] = initial_obs
         obs=t.tensor(obs)
-        actions = t.zeros((1, max_len, 1), dtype=t.long)
-        reward = t.zeros((1, max_len, 1))
-        timesteps = t.zeros((1, max_len, 1))
+        #actions = t.zeros((1, 1, 1), dtype=t.long)
+        #reward = t.zeros((1, 1, 1))
+        actions=None
+        reward=None
+        timesteps = t.zeros((1, 1, 1))
         current_episode = 0
 
         rendered_obs = t.from_numpy(env.render()).unsqueeze(0)
@@ -36,6 +47,7 @@ def initialize_playground(model_path):
         st.session_state.timesteps = timesteps
         st.session_state.n_episode=0
         st.session_state.dt = dt
+        st.session_state.mask = mask
 
     else:
         env = st.session_state.env
