@@ -958,8 +958,8 @@ class ConcatTransformer(TrajectoryTransformer):
 
     def predict_actions(self, x):
         return self.action_predictor(x)
-
-    def to_tokens(self, states, actions, rewards, timesteps):
+    
+    def get_token_embeddings(self, states, actions, rewards, timesteps):
         # Reshape tokens if wrong shape
         if actions.ndim == 3:
             actions = actions[:, :, 0]
@@ -976,7 +976,11 @@ class ConcatTransformer(TrajectoryTransformer):
         pad_rewards = torch.zeros(rewards.shape[0], 1, rewards.shape[2]).to(states.device)
         rewards = torch.cat([pad_rewards, rewards], dim=1)
         token_embeddings = torch.cat([states, actions, rewards], dim=-1)
-        return self.input_fc(token_embeddings.to(torch.float32))
+        return token_embeddings.to(torch.float32)
+
+    def to_tokens(self, states, actions, rewards, timesteps):
+        token_embeddings = self.get_token_embeddings(states, actions, rewards, timesteps)
+        return self.input_fc(token_embeddings)
 
     def get_logits(self, x, batch_size, seq_length, no_actions: bool):
         action_preds = self.predict_actions(x)
