@@ -61,6 +61,7 @@ if __name__ == "__main__":
 
     transformer_model_config = TransformerModelConfig(
         d_model=args.d_model,
+        d_head=args.d_head,
         n_heads=args.n_heads,
         d_mlp=args.d_mlp,
         n_layers=args.n_layers,
