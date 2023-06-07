@@ -2,11 +2,12 @@ import torch
 import streamlit as st
 import streamlit.components.v1 as components
 import uuid
+import numpy as np
 
-from .environment import get_action_preds
+from .environment import get_action_preds,respond_to_action
 from .utils import read_index_html
 from .visualizations import plot_action_preds, render_env
-
+import torch.nn.functional as F
 
 def render_game_screen(dt, env):
     columns = st.columns(2)
@@ -20,13 +21,14 @@ def render_game_screen(dt, env):
         st.write(f"Current Time: {int(current_time[0][-1].item())} Current episode: {st.session_state.n_episode}" )
         fig = render_env(env)
         st.pyplot(fig)
+        
 
     return x, cache, tokens
 
 
 def hyperpar_side_bar():
     with st.sidebar:
-        st.subheader("Hyperparameters")
+        st.subheader("Parameters")
         seed = st.number_input(
             "Enviroment Seed",
             min_value=0.0,
@@ -34,6 +36,36 @@ def hyperpar_side_bar():
             step=1.0,
         )
         st.session_state.seed = int(seed)
+        
+def utils_side_bar():
+    with st.sidebar:
+        st.subheader("Utils")
+        multiple_sample_button()
+        next_episode_sample_button()
+
+def multiple_sample_button():
+    sample_amount = int(st.number_input("Sample Multiple", key=f"sample_steps_amount",min_value=0,step=1))
+    sample_button = st.button("Sample Multiple", key=f"sample_multi_button")
+    if(sample_button):
+        for i in range(sample_amount):
+            action_preds, x, cache, tokens=get_action_preds(st.session_state.dt)
+            action_probabilities=F.softmax(action_preds.cpu().detach()[0][-1],dtype=torch.double,dim=0)
+            action= np.random.choice(len(action_probabilities), p=action_probabilities)
+            respond_to_action(st.session_state.env,action)
+
+def next_episode_sample_button():
+    sample_button = st.button("Sample Untill Next Episode", key=f"next_episode_sample_button")
+    if(sample_button):
+        sample_amount= int(st.session_state.env.max_steps - st.session_state.timesteps[0][-1].item())
+        for i in range(sample_amount):
+                action_preds, x, cache, tokens=get_action_preds(st.session_state.dt)
+                action_probabilities=F.softmax(action_preds.cpu().detach()[0][-1],dtype=torch.double,dim=0)
+                action= np.random.choice(len(action_probabilities), p=action_probabilities)
+                respond_to_action(st.session_state.env,action)
+
+
+    
+    
 
 def render_trajectory_details():
     with st.expander("Trajectory Details"):

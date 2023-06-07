@@ -6,6 +6,7 @@ import plotly.express as px
 from src.streamlit_app.causal_analysis_components import show_ablation
 from src.streamlit_app.components import (
     hyperpar_side_bar,
+    utils_side_bar,
     record_keypresses,
     render_game_screen,
     render_trajectory_details,
@@ -62,6 +63,7 @@ with st.sidebar:
             reset_env_dt()
 
 hyperpar_side_bar()
+utils_side_bar()
 
 
 
