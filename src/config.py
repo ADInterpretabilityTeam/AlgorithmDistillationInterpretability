@@ -84,6 +84,7 @@ class TransformerModelConfig:
     d_model: int = 128
     n_heads: int = 4
     d_mlp: int = 256
+    d_head: int = 64
     n_layers: int = 2
     n_ctx: int = 2
     layer_norm: bool = True
@@ -94,8 +95,6 @@ class TransformerModelConfig:
     device: str = "cpu"
 
     def __post_init__(self):
-        assert self.d_model % self.n_heads == 0
-        self.d_head = self.d_model // self.n_heads
         assert self.time_embedding_type in ["embedding", "linear"]
         if isinstance(self.device, str):
             self.device = torch.device(self.device)

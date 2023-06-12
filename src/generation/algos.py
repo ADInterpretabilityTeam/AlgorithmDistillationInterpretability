@@ -2,7 +2,7 @@ import numpy as np
 import heapq
 
 
-def value_iteration(env, discount, theta=1e-4):
+def value_iteration(env, discount, theta=1e-5):
     # Convert the reward rules into a reward matrix
     R = np.zeros_like(env.transition)
     for (
