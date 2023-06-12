@@ -52,17 +52,19 @@ def plot_action_preds(action_preds):
 def plot_attention_pattern_single(
     cache, layer, softmax=True, specific_heads: List = None
 ):
-    n_tokens = st.session_state.dt.n_ctx - 1
+    n_tokens = int(len(st.session_state.timesteps[0]))
 
-    n = n_tokens // 3 - 1
     labels = []
+    
+    for i in range(0, n_tokens):
+        labels.append(f'S {i}') #TODO add episode count
 
-    for i in range(1, n + 1):
-        labels.append("S" + str(i))
-        labels.append("A" + str(i))
-        labels.append("R" + str(i))
-
-    labels.pop()  # remove the last A
+    
+    if len(labels)>0:
+        labels.pop()
+    else:
+        st.write("No steps avaliable")
+      # remove the last A
 
     if softmax:
         if cache["pattern", layer, "attn"].shape[0] == 1:
@@ -86,6 +88,7 @@ def plot_attention_pattern_single(
             result = cv.attention.attention_heads(
                 attention=attention_pattern, tokens=labels
             )
+            
             components.html(str(result), width=500, height=700)
         else:
             st.write("Not implemented yet")
