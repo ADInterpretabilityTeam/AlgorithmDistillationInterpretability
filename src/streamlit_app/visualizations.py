@@ -56,13 +56,11 @@ def plot_attention_pattern_single(
 
     labels = []
     
-    for i in range(0, n_tokens):
+    for i in range(0, n_tokens -1):
         labels.append(f'S {i}') #TODO add episode count
 
     
     if len(labels)>0:
-        labels.pop()
-    else:
         st.write("No steps avaliable")
       # remove the last A
 
