@@ -131,12 +131,6 @@ def evaluate_ad_agent(
         # Check for done and reset appropriately
         if done:
             # Update tokens and embeddings
-            tokens = model.get_token_embeddings(
-                states=states,
-                actions=actions,
-                rewards=rewards,
-                timesteps=time
-            )
             embeddings = model.to_tokens(
                 states=states,
                 actions=actions,
@@ -193,6 +187,6 @@ def evaluate_ad_agent(
 
     if return_cache:
         _, cache = model.transformer.run_with_cache(embeddings)
-        return tokens, embeddings, cache
+        return state_buffer, action_buffer, reward_buffer, embeddings, cache
 
     return random_score, optimal_score, ep_rewards[:-1]
