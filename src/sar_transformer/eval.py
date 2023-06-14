@@ -59,7 +59,8 @@ def evaluate_ad_agent(
     n_episodes: int,
     temp: float = 1.,
     device: str = "cuda",
-    track: bool = False
+    track: bool = False,
+    return_cache: bool = False
 ):
     # Set up model for evaluation
     model = model.to(device)
@@ -85,6 +86,8 @@ def evaluate_ad_agent(
     
     # Set up buffers
     total_steps = 0
+    tokens = None
+    embeddings = None
     state_buffer = np.zeros((1, max_len, n_obs))
     action_buffer = np.zeros((1, max_len, 1))
     reward_buffer = np.zeros((1, max_len, 1))
@@ -127,6 +130,20 @@ def evaluate_ad_agent(
         
         # Check for done and reset appropriately
         if done:
+            # Update tokens and embeddings
+            tokens = model.get_token_embeddings(
+                states=states,
+                actions=actions,
+                rewards=rewards,
+                timesteps=time
+            )
+            embeddings = model.to_tokens(
+                states=states,
+                actions=actions,
+                rewards=rewards,
+                timesteps=time,
+            )
+            # Reset environment
             obs, _ = env.reset()
             current_timestep = 0
             current_episode += 1
@@ -173,5 +190,9 @@ def evaluate_ad_agent(
                     },
                     #step=batch_number,
                 )
+
+    if return_cache:
+        _, cache = model.transformer.run_with_cache(embeddings)
+        return tokens, embeddings, cache
 
     return random_score, optimal_score, ep_rewards[:-1]
