@@ -75,7 +75,7 @@ def render_video_from_policy(model, video_file_name):
     video.release()
 
 
-def visualize_learning_history(file_name, video_file_name, every_n_eps=1):
+def visualize_learning_history(file_name, every_n_eps=1):
     # Load in data
     data = np.load(file_name, allow_pickle=True)
     env = data['env'].item()
@@ -85,9 +85,7 @@ def visualize_learning_history(file_name, video_file_name, every_n_eps=1):
     actions = data["actions"]
     total_eps = data["observations"].shape[0] // ep_len
     # Create video
-    fourc = cv2.VideoWriter_fourcc(*'avc1')
-    x, y, _ = env.render().shape
-    video = cv2.VideoWriter(f'{video_file_name}.mp4', fourc, 1.0, (x, y))
+    frames = []
     # Iterate over episodes
     for ep in range(0, total_eps, every_n_eps):
         start_idx = ep * ep_len
@@ -104,10 +102,23 @@ def visualize_learning_history(file_name, video_file_name, every_n_eps=1):
             env.prev_action = prev_action
             env.update_flag()
             render = env.render()
-            render = cv2.cvtColor(render, cv2.COLOR_BGR2RGB)  # cv2 reads in images as BGR by default
-            video.write(render)
+            frames.append(render)
             # Step
             prev_state = current_state
             prev_action = actions[i - 1, 0]
             current_state = np.argmax(states[i, :])
+    return frames
+
+
+def learning_history_to_video(file_name, video_file_name, every_n_eps=1):
+    # Load in data
+    frames = visualize_learning_history(file_name, every_n_eps)
+    # Create video
+    fourc = cv2.VideoWriter_fourcc(*'avc1')
+    x, y, _ = frames[0].shape
+    video = cv2.VideoWriter(f'{video_file_name}.mp4', fourc, 1.0, (x, y))
+    # Iterate over frames
+    for frame in frames:
+        render = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # cv2 reads in images as BGR by default
+        video.write(render)
     video.release()
