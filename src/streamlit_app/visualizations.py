@@ -60,7 +60,7 @@ def plot_attention_pattern_single(
         labels.append(f'S {i}') #TODO add episode count
 
     
-    if len(labels)>0:
+    if len(labels)==0:
         st.write("No steps avaliable")
       # remove the last A
 
