@@ -60,3 +60,5 @@ git+https://github.com/Stable-Baselines-Team/stable-baselines3-contrib@feat/gymn
 
 # networkx for working with graphs
 networkx==3.1
+
+opencv-python
