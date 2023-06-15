@@ -3,7 +3,7 @@ import time
 import streamlit as st
 import plotly.express as px
 from src.visualization import visualize_learning_history
-from src.streamlit_app.causal_analysis_components import show_ablation
+from src.streamlit_app.causal_analysis_components import show_ablation,show_ablation_all
 from src.streamlit_app.components import (
     hyperpar_side_bar,
     utils_side_bar,
@@ -70,7 +70,7 @@ utils_side_bar()
 
 # st.session_state.max_len = 1
 env, dt = initialize_playground(selected_model_path)
-x, cache, tokens = render_game_screen(dt, env)
+action_preds,x, cache, tokens = render_game_screen(dt, env)
 
 action_options = [f"Action {i}" for i in range(1, env.action_space.n + 1)]#TODO maybe needs a done option
 action_string_to_id = {element: index for index, element in enumerate(action_options)}
@@ -128,7 +128,7 @@ with st.sidebar:
             "Observation View",
         ],
     )
-    causal_analyses = st.multiselect("Select Causal Analyses", ["Ablation"])
+    causal_analyses = st.multiselect("Select Causal Analyses", ["Ablation","Ablation Effects"])
 analyses = dynamic_analyses + static_analyses + causal_analyses
 
 with st.sidebar:
@@ -149,6 +149,9 @@ if "OV Circuit" in analyses:
 
 if "Ablation" in analyses:
     show_ablation(dt, logit_dir=logit_dir, original_cache=cache)
+if "Ablation Effects" in analyses:
+    show_ablation_all(dt,positive_action_direction,negative_action_direction,action_preds)
+
 
 
 if "Residual Stream Contributions" in analyses:
