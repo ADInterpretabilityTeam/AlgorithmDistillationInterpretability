@@ -133,17 +133,15 @@ videos/
 wandb/
 runs/
 .vscode
-**.pt
 tmp/
 trajectories/
 .DS_Store
-./models/
+.src/models/
 artifacts/
 
 *.png
 *.mp4
 *.gif
 *.npz
-src/streamlit_app/model_index.py
 download_wanbb_artifact.py
 
