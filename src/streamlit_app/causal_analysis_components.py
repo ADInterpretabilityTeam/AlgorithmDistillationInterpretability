@@ -17,7 +17,7 @@ def ablate_all_hooks(dt,ablate_to_mean,positive_dir,negative_dir,original_preds=
     action_preds={}
     if original_preds is not None:
         original_preds = np.exp(original_preds) / np.sum(np.exp(original_preds))
-        original_diference= original_preds[0][0][positive_dir] - original_preds[0][0][negative_dir]
+        original_diference= original_preds[positive_dir] - original_preds[negative_dir]
     else:
         original_diference= None
     
@@ -37,9 +37,9 @@ def ablate_all_hooks(dt,ablate_to_mean,positive_dir,negative_dir,original_preds=
 def get_ablation_preds(dt,positive_dir,negative_dir,original_diference=None):
     action_preds, x, cache, tokens = get_action_preds(dt)
     dt.transformer.reset_hooks()
-    action_preds=action_preds.detach().cpu().numpy()
+    action_preds=action_preds.detach().cpu().numpy()[0][-1]
     action_preds = np.exp(action_preds) / np.sum(np.exp(action_preds))
-    ablated_diference=action_preds[0][0][positive_dir]-action_preds[0][0][negative_dir]
+    ablated_diference=action_preds[positive_dir]-action_preds[negative_dir]
     if original_diference is not None:
         ablated_diference=ablated_diference-original_diference
 
@@ -51,11 +51,12 @@ def show_ablation_all(dt,positive_dir, negative_dir, original_predictions):
 
         ablate_to_mean = st.checkbox("Ablate all to mean", value=True)
         if st.checkbox("Compare to original", value=True):
-            org_preds=original_predictions.detach().cpu().numpy()
+            org_preds=original_predictions.detach().cpu().numpy()[0][-1]
         else:
             org_preds= None
         action_preds=ablate_all_hooks(dt,ablate_to_mean,positive_dir,negative_dir,original_preds=org_preds)
         plot_action_diferences(action_preds)
+
         
 
 
