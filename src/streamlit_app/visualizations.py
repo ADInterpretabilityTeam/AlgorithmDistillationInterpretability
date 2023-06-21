@@ -19,7 +19,7 @@ def plot_action_diferences(action_difs):
     fig = px.bar(
         df,
         orientation="v",
-        labels={"index": "", "value": "Probability"},
+        labels={"index": "", "value": "Probability difference"},
         height=320,
         width=320,
         # labels={"index": "Action", "value": "Probability"},
@@ -100,7 +100,7 @@ def plot_attention_pattern_single(
             result = cv.attention.attention_patterns(
                 attention=attention_pattern, tokens=labels
             )
-            components.html(str(result), width=500, height=400)
+            components.html(str(result), width=500, height=500)
         else:
             st.write("Not implemented yet")
 
