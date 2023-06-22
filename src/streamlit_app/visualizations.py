@@ -13,6 +13,34 @@ action_string_to_id = {element: index for index, element in enumerate(action_opt
 action_id_to_string = {v: k for k, v in action_string_to_id.items()}
 
 
+def plot_action_diferences(action_difs):
+    # make bar chart of action_preds
+    df = pd.DataFrame.from_dict(action_difs, orient='index', columns=['Values'])
+    fig = px.bar(
+        df,
+        orientation="v",
+        labels={"index": "", "value": "Probability"},
+        height=320,
+        width=320,
+        # labels={"index": "Action", "value": "Probability"},
+        
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=20), showlegend=False, font=dict(size=18)
+    )
+    # fig.update_xaxes(
+    #     range=[0,1]
+    # )
+    fig.update_yaxes(
+        # ticktext=action_preds,
+        tickfont=dict(size=18),
+        ticklabelposition="inside",
+        automargin=True,
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def plot_action_preds(action_preds):
     # make bar chart of action_preds
     action_preds = action_preds[-1][-1]

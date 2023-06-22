@@ -23,7 +23,7 @@ def render_game_screen(dt, env):
         st.pyplot(fig)
         
 
-    return x, cache, tokens
+    return action_preds,x, cache, tokens
 
 
 def hyperpar_side_bar():

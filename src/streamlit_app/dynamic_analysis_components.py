@@ -64,7 +64,7 @@ def show_attention_pattern(dt, cache):
 
 def show_residual_stream_contributions_single(dt, cache, logit_dir):
     with st.expander(
-        "Show Residual Stream Contributions at current Reward-to-Go"
+        "Show Residual Stream Contributions"
     ):
         residual_decomp = get_residual_decomp(dt, cache, logit_dir)
 
