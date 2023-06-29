@@ -10,11 +10,7 @@ from dataclasses import dataclass
 
 import gymnasium as gym
 import torch
-from minigrid.wrappers import (
-    FullyObsWrapper,
-    OneHotPartialObsWrapper,
-    RGBImgPartialObsWrapper,
-)
+
 from src.generation import *
 
 # from .environments.wrappers import ViewSizeWrapper
@@ -54,14 +50,7 @@ class EnvironmentConfig:
             else:
                 self.env = gym.make(self.env_id)
 
-        if self.env_id.startswith("MiniGrid"):
-            if self.fully_observed:
-                self.env = FullyObsWrapper(self.env)
-            elif self.one_hot_obs:
-                self.env = OneHotPartialObsWrapper(self.env)
-            elif self.img_obs:
-                self.env = RGBImgPartialObsWrapper(self.env)
-        elif self.env_id.startswith("Graph"):
+        if self.env_id.startswith("Graph"):
             self.n_states = self.env.n_states
             self.n_actions = self.env.n_actions
             self.max_steps = self.env.max_steps
