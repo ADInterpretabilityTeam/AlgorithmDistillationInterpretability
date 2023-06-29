@@ -36,12 +36,12 @@ def ablate_all_hooks(dt,ablate_to_mean,positive_dir,negative_dir,original_preds=
 
 def get_ablation_preds(dt,positive_dir,negative_dir,original_diference=None):
     action_preds, x, cache, tokens = get_action_preds(dt)
-    dt.transformer.reset_hooks()
     action_preds=action_preds.detach().cpu().numpy()[0][-1]
     action_preds = np.exp(action_preds) / np.sum(np.exp(action_preds))
     ablated_diference=action_preds[positive_dir]-action_preds[negative_dir]
     if original_diference is not None:
         ablated_diference=ablated_diference-original_diference
+    dt.transformer.reset_hooks()
 
     return ablated_diference
 
