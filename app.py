@@ -224,7 +224,13 @@ with st.expander("Show Dataset"):
 
 st.markdown("""---""")
 with st.expander("Show Rules"):
-    env.reward_rules
+    #Rules are of the form (old_state, new_state, action, probability, value, flag)
+    st.write(f'Old State: {env.reward_rules[0][0]}')
+    st.write(f'New State: {env.reward_rules[0][1]}')
+    st.write(f'Action: {env.reward_rules[0][2]}')
+    st.write(f'Probability: {env.reward_rules[0][3]}')
+    st.write(f'Value:{env.reward_rules[0][4]}')
+    st.write(f'Flag:{env.reward_rules[0][5]}')
 
 st.session_state.env = env
 st.session_state.dt = dt
