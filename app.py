@@ -170,6 +170,7 @@ with st.expander("Show history"):
 
     if trajectory_length > 1:
         historic_actions = st.session_state.a[0, -trajectory_length:].flatten()
+        historic_rewards=st.session_state.reward[0, -trajectory_length:].flatten()
         right_adjustment = 0
         if(trajectory_length > 2):
             state_number = st.slider(
@@ -190,13 +191,11 @@ with st.expander("Show history"):
         st.write(f"A{i}:", action_name_func(historic_actions[i].item()))
         if(state_number< trajectory_length -2):
             st.write(f"A{i+1}:", action_name_func(historic_actions[i + 1].item()))
+        st.write(f"R{i}:", historic_rewards[i].item())
         
         st.plotly_chart(px.imshow(rendered_obss[i, :, :, :]))
     else:
         st.warning("No history to show")
-
-st.markdown("""---""")
-
 
 st.markdown("""---""")
 
@@ -224,6 +223,8 @@ with st.expander("Show Dataset"):
         st.warning("No history to show")
 
 st.markdown("""---""")
+with st.expander("Show Rules"):
+    env.reward_rules
 
 st.session_state.env = env
 st.session_state.dt = dt
