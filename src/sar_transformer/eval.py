@@ -149,20 +149,21 @@ def evaluate_ad_agent(
             pbar.set_description(f"EVAL  - Random walk score: {random_score:.4f}, Optimal score: {optimal_score:.4f}, AD high score: {high_score:.4f}, AD final score: {ad_score:.4f}")
             ep_rewards.append(0)
 
-        # Update buffers
-        ep_rewards[-1] = ep_rewards[-1] + reward
-        if total_steps >= max_len:
-            # Token deletion, left shift all the elements
-            state_buffer = np.roll(state_buffer, -1, axis=1)
-            action_buffer = np.roll(action_buffer, -1, axis=1)
-            reward_buffer = np.roll(reward_buffer, -1, axis=1)
-            time_buffer = np.roll(time_buffer, -1, axis=1)
-            
-        idx = min(max_len - 1, total_steps)
-        state_buffer[:, idx] = obs
-        action_buffer[:, idx - 1, 0] = act
-        reward_buffer[:, idx - 1, 0] = reward
-        time_buffer[:, idx, 0] = current_timestep       
+        if not (current_episode == n_episodes):
+            # Update buffers
+            ep_rewards[-1] = ep_rewards[-1] + reward
+            if total_steps >= max_len:
+                # Token deletion, left shift all the elements
+                state_buffer = np.roll(state_buffer, -1, axis=1)
+                action_buffer = np.roll(action_buffer, -1, axis=1)
+                reward_buffer = np.roll(reward_buffer, -1, axis=1)
+                time_buffer = np.roll(time_buffer, -1, axis=1)
+                
+            idx = min(max_len - 1, total_steps)
+            state_buffer[:, idx] = obs
+            action_buffer[:, idx - 1, 0] = act
+            reward_buffer[:, idx - 1, 0] = reward
+            time_buffer[:, idx, 0] = current_timestep       
 
     env.close()
     pbar.close()
