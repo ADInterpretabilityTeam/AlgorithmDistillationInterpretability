@@ -49,18 +49,26 @@ def get_env_and_dt(model_path,seed=None):
     return env, dt
 
 
-def get_action_preds(dt):
+def get_action_preds(dt,use_modified=None):
     # so we can ignore older models when making updates
 
     max_len = get_max_len_from_model_type(
         dt.model_type,
         dt.transformer_config.n_ctx,
     )
-
-    timesteps = st.session_state.timesteps[:, -max_len:]
-    obs = st.session_state.obs
-    actions = st.session_state.a
-    reward = st.session_state.reward
+    if use_modified and "modified_a" in st.session_state:
+        timesteps = st.session_state.timesteps[:, -max_len:]
+        obs_original =st.session_state.obs
+        obs =  torch.cat((st.session_state.modified_obs, obs_original[:,:obs_original.shape[1] - st.session_state.modified_obs.shape[1]]), dim=1)
+        action_original =st.session_state.a
+        actions =  torch.cat((st.session_state.modified_a, action_original[:,:action_original.shape[1] -  st.session_state.modified_a.shape[1]]), dim=1)
+        reward_original =st.session_state.reward
+        reward =  torch.cat((st.session_state.modified_reward, reward_original[:,:reward_original.shape[1] - st.session_state.modified_reward.shape[1]]), dim=1)
+    else:
+        timesteps = st.session_state.timesteps[:, -max_len:]
+        obs = st.session_state.obs
+        actions = st.session_state.a
+        reward = st.session_state.reward
 
     # truncations:
     obs = obs[:, -max_len:] if obs.shape[1] > max_len else obs

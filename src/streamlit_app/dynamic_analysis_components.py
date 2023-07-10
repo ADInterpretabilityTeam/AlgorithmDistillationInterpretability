@@ -18,11 +18,12 @@ from .constants import (
 from .utils import fancy_histogram, fancy_imshow
 from .visualizations import (
     plot_attention_pattern_single,
+    plot_attention_pattern_difference,
     plot_single_residual_stream_contributions,
 )
 
 
-def show_attention_pattern(dt, cache):
+def show_attention_pattern(dt, cache,cache_modified):
     with st.expander("Attention Pattern at at current Reward-to-Go"):
         st.latex(
             r"""
@@ -49,6 +50,7 @@ def show_attention_pattern(dt, cache):
             plot_attention_pattern_single(
                 cache, 0, softmax=softmax, specific_heads=heads
             )
+            layer=0
         else:
             layer = st.slider(
                 "Layer",
@@ -60,6 +62,17 @@ def show_attention_pattern(dt, cache):
             plot_attention_pattern_single(
                 cache, layer, softmax=softmax, specific_heads=heads
             )
+        if st.checkbox("Display_modified"):
+
+            if st.checkbox("Display_diference"):
+                plot_attention_pattern_difference(
+                        cache,cache_modified, layer, softmax=softmax, specific_heads=heads
+                    )
+            else:
+                plot_attention_pattern_single(
+                        cache_modified, layer, softmax=softmax, specific_heads=heads
+                    )
+
 
 
 def show_residual_stream_contributions_single(dt, cache, logit_dir):

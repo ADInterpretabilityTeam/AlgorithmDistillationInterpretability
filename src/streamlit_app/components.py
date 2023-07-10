@@ -13,6 +13,7 @@ def render_game_screen(dt, env):
     columns = st.columns(2)
     with columns[0]:
         action_preds, x, cache, tokens = get_action_preds(dt)
+        _, _, cache_modified, _ = get_action_preds(dt,use_modified=True)
         plot_action_preds(action_preds)
     with columns[1]:
         current_time = st.session_state.timesteps 
@@ -23,7 +24,7 @@ def render_game_screen(dt, env):
         st.pyplot(fig)
         
 
-    return action_preds,x, cache, tokens
+    return action_preds,x, cache,cache_modified, tokens
 
 
 def hyperpar_side_bar():
@@ -65,7 +66,34 @@ def next_episode_sample_button():
 
 
     
-    
+
+def modify_buffer(dt):
+    with st.expander("Modify Buffer"):#TODO deal with longer than context len buffers
+        if (st.session_state.timesteps.shape[1]>1):
+            current_state =np.argmax(st.session_state.obs[0].squeeze(-1).tolist(),axis=1).tolist() 
+            state_modified_string=st.text_area("Modified States", value=current_state) 
+            if "modified_obs" in st.session_state:
+                st.text(np.argmax(st.session_state.modified_obs[0].squeeze(-1).tolist(),axis=1).tolist())
+            state_modified = [int(float(num)) for num in state_modified_string.strip('[]').split(',')]
+            current_actions = st.session_state.a[0].squeeze(-1).tolist()
+            actions_modified_string=st.text_area("Modified Actions", value=current_actions)
+            if "modified_a" in st.session_state:
+                st.text(st.session_state.modified_a[0].squeeze(-1).tolist())
+
+            actions_modified = [int(float(num)) for num in actions_modified_string.strip('[]').split(',')]
+            current_reward = st.session_state.reward[0].squeeze(-1).tolist()
+            reward_modified_string=st.text_area("Modified Reward", value=current_reward)  
+            if "modified_reward" in st.session_state:
+                st.text(st.session_state.modified_reward[0].squeeze(-1).tolist())
+            reward_modified = [int(float(num)) for num in reward_modified_string.strip('[]').split(',')]
+            if st.button("Modify"): 
+                st.session_state.modified_obs=torch.nn.functional.one_hot(torch.tensor(state_modified),dt.environment_config.n_states).unsqueeze(0)#TODO check if env uses onehot obs instead
+                st.session_state.modified_a= torch.tensor(actions_modified).unsqueeze(0).unsqueeze(2)
+                st.session_state.modified_reward= torch.tensor(reward_modified).unsqueeze(0).unsqueeze(2)
+        else:
+            st.warning("Cant modify whithout buffer please take a step")#TODO should maybe let you modify obs 
+
+        
 
 def render_trajectory_details():
     with st.expander("Trajectory Details"):
@@ -87,7 +115,7 @@ def render_trajectory_details():
 
 
 def reset_button():
-    if st.button("reset"):
+    if st.button("Reset"):
         reset_env_dt()
         st.experimental_rerun()
 

@@ -12,6 +12,7 @@ from src.streamlit_app.components import (
     render_trajectory_details,
     reset_button,
     reset_env_dt,
+    modify_buffer,
 )
 from src.streamlit_app.content import (
     analysis_help,
@@ -70,7 +71,7 @@ utils_side_bar()
 
 # st.session_state.max_len = 1
 env, dt = initialize_playground(selected_model_path)
-action_preds,x, cache, tokens = render_game_screen(dt, env)
+action_preds,x, cache,cache_modified, tokens = render_game_screen(dt, env)
 
 action_options = [f"Action {i}" for i in range(1, env.action_space.n + 1)]#TODO maybe needs a done option
 action_string_to_id = {element: index for index, element in enumerate(action_options)}
@@ -114,6 +115,8 @@ with st.sidebar:
             selected_action_direction
         ]
         logit_dir = dt.action_predictor.weight[selected_action_direction]
+    
+    select_utils = st.multiselect("Select Utils", ["Modify Buffer"])
 
     st.subheader("Analysis Selection")
     static_analyses = st.multiselect(
@@ -129,7 +132,9 @@ with st.sidebar:
         ],
     )
     causal_analyses = st.multiselect("Select Causal Analyses", ["Ablation","Ablation Effects"])
+
 analyses = dynamic_analyses + static_analyses + causal_analyses
+utils= select_utils
 
 with st.sidebar:
     render_trajectory_details()
@@ -137,7 +142,10 @@ with st.sidebar:
 
 if len(analyses) == 0:
     st.warning("Please select at least one analysis.")
-
+#Utils
+if "Modify Buffer" in utils:
+    modify_buffer(dt)
+#Analyses
 if "reward Embeddings" in analyses:
     show_rtg_embeddings(dt, logit_dir)
 if "Time Embeddings" in analyses:
@@ -157,9 +165,11 @@ if "Ablation Effects" in analyses:
 if "Residual Stream Contributions" in analyses:
     show_residual_stream_contributions_single(dt, cache, logit_dir=logit_dir)
 if "Attention Pattern" in analyses:
-    show_attention_pattern(dt, cache)
+    show_attention_pattern(dt, cache,cache_modified)
 if "Observation View" in analyses:
     render_observation_view(dt, tokens, logit_dir)
+
+
 
 
 st.markdown("""---""")

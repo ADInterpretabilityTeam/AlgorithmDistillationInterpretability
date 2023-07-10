@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import torch
 
 action_options = [f"Action {i}" for i in range(0,10)]#TODO need to put the number of actions here somehow
 action_string_to_id = {element: index for index, element in enumerate(action_options)}
@@ -108,6 +109,52 @@ def plot_attention_pattern_single(
         if cache["pattern", layer, "attn"].shape[0] == 1:
             attention_pattern = cache["attn_scores", layer, "attn"][0]
 
+            if specific_heads is not None:
+                attention_pattern = attention_pattern[specific_heads]
+
+            result = cv.attention.attention_heads(
+                attention=attention_pattern, tokens=labels
+            )
+            
+            components.html(str(result), width=500, height=700)
+        else:
+            st.write("Not implemented yet")
+
+
+def plot_attention_pattern_difference(
+    cache,cache2, layer, softmax=True, specific_heads: List = None
+):
+    n_tokens = int(len(st.session_state.timesteps[0]))
+
+    labels = []
+    
+    for i in range(0, n_tokens -1):
+        labels.append(f'S {i}') #TODO add episode count
+
+    
+    if len(labels)==0:
+        st.write("No steps avaliable")
+      # remove the last A
+
+    if softmax:
+        if cache["pattern", layer, "attn"].shape[0] == 1:
+            attention_pattern = cache["pattern", layer, "attn"][0]-cache2["pattern", layer, "attn"][0]
+            attention_pattern=torch.nn.functional.softmax(torch.tril(attention_pattern),dim=1)
+            print(attention_pattern)
+            attention_pattern=torch.tril(attention_pattern)
+            if specific_heads is not None:
+                attention_pattern = attention_pattern[specific_heads]
+            result = cv.attention.attention_patterns(
+                attention=attention_pattern, tokens=labels
+            )
+            components.html(str(result), width=500, height=500)
+        else:
+            st.write("Not implemented yet")
+
+    else:
+        if cache["pattern", layer, "attn"].shape[0] == 1:
+            attention_pattern = cache["attn_scores", layer, "attn"][0]-cache2["attn_scores", layer, "attn"][0]
+            
             if specific_heads is not None:
                 attention_pattern = attention_pattern[specific_heads]
 
