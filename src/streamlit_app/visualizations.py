@@ -139,15 +139,13 @@ def plot_attention_pattern_difference(
     if softmax:
         if cache["pattern", layer, "attn"].shape[0] == 1:
             attention_pattern = cache["pattern", layer, "attn"][0]-cache2["pattern", layer, "attn"][0]
-            attention_pattern=torch.nn.functional.softmax(torch.tril(attention_pattern),dim=1)
-            print(attention_pattern)
-            attention_pattern=torch.tril(attention_pattern)
+
             if specific_heads is not None:
                 attention_pattern = attention_pattern[specific_heads]
-            result = cv.attention.attention_patterns(
-                attention=attention_pattern, tokens=labels
+            result = cv.attention.attention_heads(
+                attention=attention_pattern, tokens=labels,max_value=1,min_value=-1
             )
-            components.html(str(result), width=500, height=500)
+            components.html(str(result), width=500, height=700)
         else:
             st.write("Not implemented yet")
 
